@@ -406,16 +406,20 @@ def propagate_IOB_SING(database, tiles_by_grid):
         database[top_tile]['bits']['CLB_IO_CLK'] = copy.deepcopy(bits)
         database[top_tile]['bits']['CLB_IO_CLK']['words'] = 2
         database[top_tile]['bits']['CLB_IO_CLK']['offset'] = 99
-        # start_offset 2 (not 0): the top SING tile only has frame words 99-100,
-        # and nextpnr-xilinx places the IOB features that live in the full
-        # tile's *upper* words (2-3) here.  With start_offset 0 those map to
-        # absolute words 101-102, which don't exist -> fasm2frames "invalid
-        # word address" and the features are silently dropped.  start_offset 2
-        # gives effective offset 97 so words 2-3 land at abs 99-100.  HW-verified
-        # (VC707 open-flow UART DSP calculator computes correctly).
+        # IOB33 (HR, 4-word tiles): Y1 lives in relative word 1, Y0 in word 2
+        # (measured on RIOI3_X31Y47, offset 95: Y1 -> 96, Y0 -> 97). nextpnr
+        # (classic and himbaechel) writes IOB_Y1 on a top SING, so start_offset
+        # 0 puts that at abs 100, inside the SING's own words 99-100.
+        # start_offset 2 put it at abs 98, in the neighbour full tile -- the
+        # xc7s25 bug, confirmed against a Vivado 2026.1 bitstream.
+        # IOB18 (HP): leave 2. 0e3f20b5 HW-verified that value on VC707; those
+        # tiles are a different geometry and are not decided here.
+        prev_type = database[prev_tile]['type']
+        is_hr_iob = prev_type in ('LIOB33', 'RIOB33')
+        top_so = 0 if is_hr_iob else 2
         database[top_tile]['bits']['CLB_IO_CLK']['alias'] = {
-            'type': database[prev_tile]['type'],
-            'start_offset': 2,
+            'type': prev_type,
+            'start_offset': top_so,
             'sites': {
                 'IOB33_Y0': 'IOB33_Y1',
             }
@@ -488,15 +492,15 @@ def propagate_IOI_SING(database, tiles_by_grid):
         database[top_tile]['bits']['CLB_IO_CLK'] = copy.deepcopy(bits)
         database[top_tile]['bits']['CLB_IO_CLK']['words'] = 2
         database[top_tile]['bits']['CLB_IO_CLK']['offset'] = 99
-        # start_offset 2 (not 0): see propagate_IOB_SING.  The top SING IOI tile
-        # has only frame words 99-100; nextpnr-xilinx targets the full tile's
-        # upper OLOGIC/ILOGIC words (2-3) here, which under start_offset 0 map to
-        # absolute words 101-102 (don't exist) and get dropped by fasm2frames.
-        # start_offset 2 -> effective offset 97 -> words 2-3 at abs 99-100.
-        # HW-verified via the open-flow calculator (OLOGIC_Y0.OMUX.D1 @ abs 100).
+        # IOI3 (HR, 4-word): same geometry as IOB33 -- Y1 is relative word 1,
+        # so start_offset 0 for the top SING. IOI (HP, virtex7): leave 2;
+        # 0e3f20b5's VC707 golden is a different question.
+        prev_type = database[prev_tile]['type']
+        is_hr_ioi = prev_type in ('LIOI3', 'RIOI3')
+        top_so = 0 if is_hr_ioi else 2
         database[top_tile]['bits']['CLB_IO_CLK']['alias'] = {
-            'type': database[prev_tile]['type'],
-            'start_offset': 2,
+            'type': prev_type,
+            'start_offset': top_so,
             'sites': {}
         }
 

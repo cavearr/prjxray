@@ -77,9 +77,9 @@ KNOWN_DIFFERENCES = {
     ('spartan7', 'xc7s25'): (
         'MONITOR_BOT_FUJI2 exists on no other spartan7 device. The six upper '
         '*_SING tiles used to carry alias start_offset 2 (generate_full.py '
-        'after the VC707 IOB18/IOI change); IOB33/IOI3 top SING is 0 again '
-        '(the 4-word-tile geometry, Vivado-golden on xc7s25), matching every '
-        'older HR model. HP IOB18/IOI is unchanged and not on this device.', {
+        'after the VC707 IOB18/IOI change); top SING is 0 again for both '
+        'IOB33/IOI3 (HR, Vivado-golden on xc7s25) and IOB18/IOI (HP, '
+        'Jonathan\'s xc7vx485t 036-iob18-ologic-sing specimens).', {
             ('MONITOR_BOT_FUJI2', 'right-only'),
         }),
     ('spartan7', 'xc7s100'): (

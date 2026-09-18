@@ -406,20 +406,20 @@ def propagate_IOB_SING(database, tiles_by_grid):
         database[top_tile]['bits']['CLB_IO_CLK'] = copy.deepcopy(bits)
         database[top_tile]['bits']['CLB_IO_CLK']['words'] = 2
         database[top_tile]['bits']['CLB_IO_CLK']['offset'] = 99
-        # IOB33 (HR, 4-word tiles): Y1 lives in relative word 1, Y0 in word 2
-        # (measured on RIOI3_X31Y47, offset 95: Y1 -> 96, Y0 -> 97). nextpnr
-        # (classic and himbaechel) writes IOB_Y1 on a top SING, so start_offset
-        # 0 puts that at abs 100, inside the SING's own words 99-100.
-        # start_offset 2 put it at abs 98, in the neighbour full tile -- the
-        # xc7s25 bug, confirmed against a Vivado 2026.1 bitstream.
-        # IOB18 (HP): leave 2. 0e3f20b5 HW-verified that value on VC707; those
-        # tiles are a different geometry and are not decided here.
+        # IOB33 (HR) and IOB18 (HP) are both 4-word tiles: Y1 lives in
+        # relative words 0-1, Y0 in 2-3. nextpnr (classic and himbaechel)
+        # writes IOB_Y1 on a top SING, so start_offset 0 puts that at abs
+        # 99-100, inside the SING's own window. start_offset 2 put it at
+        # abs 97-98, in the neighbour full tile.
+        # HR: Vivado 2026.1 on xc7s25 (J6 / RIOB33_SING_X31Y49).
+        # HP: Jonathan's 036-iob18-ologic-sing specimens on xc7vx485t
+        # (50/50 top-SING FASM lines reproduce with 0, 0/50 with 2).
+        # 0e3f20b5's VC707 "HW-verified" 2 assembled OLOGIC_Y0 into 99-100;
+        # nextpnr and the specimens name that site Y1.
         prev_type = database[prev_tile]['type']
-        is_hr_iob = prev_type in ('LIOB33', 'RIOB33')
-        top_so = 0 if is_hr_iob else 2
         database[top_tile]['bits']['CLB_IO_CLK']['alias'] = {
             'type': prev_type,
-            'start_offset': top_so,
+            'start_offset': 0,
             'sites': {
                 'IOB33_Y0': 'IOB33_Y1',
             }
@@ -492,15 +492,14 @@ def propagate_IOI_SING(database, tiles_by_grid):
         database[top_tile]['bits']['CLB_IO_CLK'] = copy.deepcopy(bits)
         database[top_tile]['bits']['CLB_IO_CLK']['words'] = 2
         database[top_tile]['bits']['CLB_IO_CLK']['offset'] = 99
-        # IOI3 (HR, 4-word): same geometry as IOB33 -- Y1 is relative word 1,
-        # so start_offset 0 for the top SING. IOI (HP, virtex7): leave 2;
-        # 0e3f20b5's VC707 golden is a different question.
+        # IOI3 (HR) and IOI (HP): same 4-word geometry as IOB33/IOB18 --
+        # Y1 is relative words 0-1, so start_offset 0 for the top SING.
+        # HP measured on Jonathan's 036-iob18-ologic-sing xc7vx485t
+        # specimens (50/50). See propagate_IOB_SING.
         prev_type = database[prev_tile]['type']
-        is_hr_ioi = prev_type in ('LIOI3', 'RIOI3')
-        top_so = 0 if is_hr_ioi else 2
         database[top_tile]['bits']['CLB_IO_CLK']['alias'] = {
             'type': prev_type,
-            'start_offset': top_so,
+            'start_offset': 0,
             'sites': {}
         }
 

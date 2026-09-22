@@ -22,6 +22,15 @@ from prjxray.lut_maker import LutMaker
 IOSTANDARD = os.getenv('XRAY_IOSTANDARD', 'LVCMOS33')
 
 
+def iostandard_for(site_type):
+    # HP banks (IOB18) are 1.8 V. One XRAY_IOSTANDARD cannot describe a
+    # part that has both HR and HP tiles; the historical default is the
+    # HR value and Vivado rejects it on an HP bank.
+    if site_type.startswith('IOB18'):
+        return 'LVCMOS18'
+    return IOSTANDARD
+
+
 def gen_sites():
     xy_fun = util.create_xy_fun('BUFR_')
     db = Database(util.get_db_root(), util.get_part())
@@ -77,25 +86,30 @@ def gen_sites():
         iobs = []
         iobs_s = []
         ilogics = []
+        iostd_of = {}
 
         for dy in (-1, -3, 2, 4):
             iob = grid.gridinfo_at_loc((loc.grid_x + dx, loc.grid_y + dy))
 
             for site, site_type in iob.sites.items():
                 # IOB33M = HR-bank (kintex7); IOB18M = HP-bank (virtex7).
+                if site_type in ('IOB33M', 'IOB18M', 'IOB33S', 'IOB18S'):
+                    iostd_of[site] = iostandard_for(site_type)
                 if site_type in ('IOB33M', 'IOB18M'):
                     iobs.append(site)
-                elif site_type == 'IOB33S':
+                elif site_type in ('IOB33S', 'IOB18S'):
                     iobs_s.append(site)
 
             ioi = grid.gridinfo_at_loc((loc.grid_x, loc.grid_y + dy))
             for site, site_type in sorted(ioi.sites.items()):
-                if site_type == 'ILOGICE3':
+                # One ILOGIC per dy, the first in site-name order. HR tiles
+                # only have ILOGICE3, so this is the historical choice there.
+                if site_type in ('ILOGICE3', 'ILOGICE2'):
                     ilogics.append(site)
                     break
 
         mmcm_site = mmcm_by_region.get(str(gridinfo.clock_region))
-        yield tile_name, min(xs), min(ys), sorted(sites), sorted(iobs), sorted(bufio_sites), ilogics, mmcm_site, sorted(iobs_s)
+        yield tile_name, min(xs), min(ys), sorted(sites), sorted(iobs), sorted(bufio_sites), ilogics, mmcm_site, sorted(iobs_s), iostd_of
 
 
 def main():
@@ -105,7 +119,7 @@ def main():
     num_outs = 0
     outputs = []
     luts = LutMaker()
-    for tile_name, x_min, y_min, sites, iobs, bufio_sites, ilogics, mmcm_site, iobs_s in gen_sites():
+    for tile_name, x_min, y_min, sites, iobs, bufio_sites, ilogics, mmcm_site, iobs_s, iostd_of in gen_sites():
         outs_used = 0
         ioclks = []
         for iob in iobs:
@@ -127,7 +141,7 @@ def main():
                     ioclk=ioclk,
                     site=iob,
                     idx=idx,
-                    iostandard=IOSTANDARD,
+                    iostandard=iostd_of[iob],
                 ))
 
         for site, x, y in sites:
@@ -164,6 +178,7 @@ def main():
                 if outs_used < len(iobs_s) and random.randint(0, 1):
                     params['consumed'] = 1
                     params['obuf_site'] = iobs_s[outs_used]
+                    params['iostd'] = iostd_of[iobs_s[outs_used]]
                     params['out_idx'] = num_outs
                     num_outs += 1
                     outs_used += 1
@@ -185,7 +200,7 @@ def main():
     ODDR #(.DDR_CLK_EDGE("SAME_EDGE")) oddr_{site} (
             .C({site}_o), .CE(1'b1), .D1(1'b1), .D2(1'b0), .R(1'b0), .S(1'b0), .Q({site}_q));
     (* KEEP, DONT_TOUCH, LOC = "{obuf_site}" *)
-    OBUF #(.IOSTANDARD("LVCMOS33")) obuf_{site} (.I({site}_q), .O(outs[{out_idx}]));
+    OBUF #(.IOSTANDARD("{iostd}")) obuf_{site} (.I({site}_q), .O(outs[{out_idx}]));
                         '''.format(**params))
                 else:
                     outputs.append(
@@ -285,10 +300,16 @@ def main():
                 '''.format(inst=inst, bufio_i=bufio_i, bsite=bsite, ilogic=ilogics[k]))
         params_list.append(rec)
 
-    print(
-        '''
-module top(input [{n1}:0] clks, output [{n2}:0] outs);
-    '''.format(n1=num_clocks - 1, n2=max(num_outs - 1, 0)))
+    # An output port with no buffer makes Vivado's IO placer fail
+    # (one unplaced port and no site left for it). Emit the port only
+    # when an OBUF actually drives it. The text matches the historical
+    # header whenever that port exists.
+    if num_outs == 0:
+        ports = "input [%d:0] clks" % (num_clocks - 1)
+    else:
+        ports = "input [%d:0] clks, output [%d:0] outs" % (
+            num_clocks - 1, num_outs - 1)
+    print("\nmodule top(%s);\n    " % ports)
 
     print("""
     (* KEEP, DONT_TOUCH *)

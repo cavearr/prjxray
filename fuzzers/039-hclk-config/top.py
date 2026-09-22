@@ -108,6 +108,17 @@ def gen_sites():
                     ilogics.append(site)
                     break
 
+        # No clock-capable IOB in this tile's neighbourhood: the specimen
+        # has nothing legal to drive the BUFR with. xc7z045's bottom
+        # HCLK_IOI3 sits on the unbonded region and is in that state.
+        if not iobs:
+            continue
+
+        # No clock-capable IOB in this neighbourhood: nothing legal drives
+        # the BUFR. xc7z045's bottom HCLK_IOI3 is on the unbonded region.
+        if not iobs:
+            continue
+
         mmcm_site = mmcm_by_region.get(str(gridinfo.clock_region))
         yield tile_name, min(xs), min(ys), sorted(sites), sorted(iobs), sorted(bufio_sites), ilogics, mmcm_site, sorted(iobs_s), iostd_of
 

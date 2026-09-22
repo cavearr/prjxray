@@ -114,11 +114,6 @@ def gen_sites():
         if not iobs:
             continue
 
-        # No clock-capable IOB in this neighbourhood: nothing legal drives
-        # the BUFR. xc7z045's bottom HCLK_IOI3 is on the unbonded region.
-        if not iobs:
-            continue
-
         mmcm_site = mmcm_by_region.get(str(gridinfo.clock_region))
         yield tile_name, min(xs), min(ys), sorted(sites), sorted(iobs), sorted(bufio_sites), ilogics, mmcm_site, sorted(iobs_s), iostd_of
 

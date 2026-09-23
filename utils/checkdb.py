@@ -71,6 +71,50 @@ def make_tile_mask(tile_segbits, tile_name, tile_bits):
     return ret
 
 
+def mask_bit(masks, addr, bitaddr):
+    '''
+    Return (bytearray, byte index, bit mask) addressing bitaddr inside the
+    mask holding addr, allocating that mask or growing it as needed
+    '''
+    mask = masks.get(addr)
+    size = bitaddr // 8 + 1
+    mask_is_missing = mask is None
+    if mask_is_missing:
+        mask = masks[addr] = bytearray(size)
+    else:
+        mask_is_too_small = len(mask) < size
+        if mask_is_too_small:
+            mask.extend(bytes(size - len(mask)))
+    return mask, bitaddr // 8, 1 << (bitaddr & 7)
+
+
+def collision_owners(grid, tile_segbits, checked_tiles, keys):
+    '''
+    Name the tile that already uses each colliding bit
+
+    Only called on the collision path, where the run is about to fail, so the
+    tiles are re-masked here instead of being kept in memory.  Every checked
+    tile is re-masked once and asked for all the keys still unclaimed, and the
+    scan stops once they are all claimed, so a database with many colliding
+    bits costs one pass over the checked tiles rather than one pass per
+    collision.
+    '''
+    unclaimed = set(keys)
+    owners = dict()
+    for tile_name in checked_tiles:
+        all_keys_claimed = len(unclaimed) == 0
+        if all_keys_claimed:
+            break
+        tile_info = grid.gridinfo_at_tilename(tile_name)
+        mtile = make_tile_mask(
+            tile_segbits[tile_info.tile_type], tile_name, tile_info.bits)
+        claimed = unclaimed.intersection(mtile)
+        for key in claimed:
+            owners[key] = mtile[key]
+        unclaimed -= claimed
+    return owners
+
+
 def parsedb_all(db_root, verbose=False):
     '''Verify .db files are individually valid'''
 
@@ -100,12 +144,22 @@ def check_tile_overlap(db, verbose=False):
     Create a mask for all the bits the tile type uses
     For each tile, create bitmasks over the entire bitstream for current part
     Throw an exception if two tiles share an address
+
+    Occupancy is one bit per bitstream bit -- a bytearray per address, grown
+    on demand -- rather than a dict entry per bit.  A dict entry carries a
+    formatted "tile.tag" name, about 250 bytes per bit, which the larger
+    fabrics turn into tens of GiB: more than a CI runner has, so those devices
+    could not be checked at all.  The names are only needed to describe a
+    collision, which is a failure path, and are recovered there from the tiles
+    already checked.
     '''
-    mall = dict()
+    masks = dict()
     tiles_type_done = dict()
     tile_segbits = dict()
+    checked_tiles = []
     grid = db.grid()
     tiles_checked = 0
+    bits_used = 0
 
     for tile_name in grid.tiles():
         tile_info = grid.gridinfo_at_tilename(tile_name)
@@ -125,30 +179,43 @@ def check_tile_overlap(db, verbose=False):
         if tiles_type_done[tile_type]:
             continue
 
-        mtile = make_tile_mask(tile_segbits[tile_type], tile_name, tile_bits)
+        mtile_keys = set()
+        for absaddr, bitaddr, tag in gen_tile_bits(tile_segbits[tile_type],
+                                                   tile_bits):
+            mtile_keys.add((absaddr, bitaddr))
         verbose and print(
             "Checking %s, type %s, bits: %s" %
-            (tile_name, tile_type, len(mtile)))
-        if len(mtile) == 0:
+            (tile_name, tile_type, len(mtile_keys)))
+        if len(mtile_keys) == 0:
             continue
 
         collisions = set()
-        for bits in mtile.keys():
-            if bits in mall.keys():
-                collisions.add(bits)
+        for addr, bitaddr in mtile_keys:
+            mask, byte, bit = mask_bit(masks, addr, bitaddr)
+            bit_is_taken = (mask[byte] & bit) != 0
+            if bit_is_taken:
+                collisions.add((addr, bitaddr))
+            else:
+                mask[byte] |= bit
+                bits_used += 1
 
         if collisions:
             print("ERROR: %s collisions" % len(collisions))
+            owners = collision_owners(
+                grid, tile_segbits, checked_tiles, collisions)
+            mtile = make_tile_mask(
+                tile_segbits[tile_type], tile_name, tile_bits)
             for ck in sorted(collisions):
                 addr, bitaddr = ck
                 word, bit = util.addr_bit2word(bitaddr)
                 print(
-                    "  %s: had %s, got %s" %
-                    (util.addr2str(addr, word, bit), mall[ck], mtile[ck]))
+                    "  %s: had %s, got %s" % (
+                        util.addr2str(addr, word, bit),
+                        owners.get(ck, "unknown"), mtile[ck]))
             raise ValueError("%s collisions" % len(collisions))
-        mall.update(mtile)
+        checked_tiles.append(tile_name)
         tiles_checked += 1
-    print("Checked %s tiles, %s bits" % (tiles_checked, len(mall)))
+    print("Checked %s tiles, %s bits" % (tiles_checked, bits_used))
 
 
 def run(db_root, part, verbose=False):

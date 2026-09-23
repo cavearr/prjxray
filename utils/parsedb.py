@@ -13,7 +13,13 @@ import sys, re
 from prjxray.util import OpenSafeFile, db_root_arg, parse_db_line
 
 
-def run(fnin, fnout=None, strict=False, verbose=False):
+def run(fnin, fnout=None, strict=False, verbose=False, aliases=None):
+    '''Verify one .db file.
+
+    strict also rejects a tag used twice, and two tags claiming one bit set,
+    except for the pairs in aliases (a set of frozensets of feature names),
+    which the database declares as deliberate aliases of one another.
+    '''
     with OpenSafeFile(fnin) as f:
         lines = f.read().split('\n')
     tags = dict()
@@ -33,8 +39,14 @@ def run(fnin, fnout=None, strict=False, verbose=False):
                 print("Original line: %s" % tags[tag], file=sys.stderr)
                 print("New line: %s" % line, file=sys.stderr)
                 assert 0, "strict: got duplicate tag %s" % (tag, )
-            assert bits not in bitss, "strict: got duplicate bits %s: %s %s" % (
-                bits, tag, bitss[bits])
+            bits_already_used = bits in bitss
+            if bits_already_used:
+                previous_tag = bitss[bits]
+                conflicting_tags = frozenset((tag, previous_tag))
+                declared_alias = (
+                    aliases is not None and conflicting_tags in aliases)
+                assert declared_alias, "strict: got duplicate bits %s: %s %s" % (
+                    bits, tag, previous_tag)
         tags[tag] = line
         if bits != None:
             bitss[bits] = tag

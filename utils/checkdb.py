@@ -115,7 +115,26 @@ def collision_owners(grid, tile_segbits, checked_tiles, keys):
     return owners
 
 
-def parsedb_all(db_root, verbose=False):
+def read_alias_file(path):
+    '''
+    Read alias groups: each line names the features that deliberately share one
+    bit set, so strict duplicate detection accepts them (one group per line,
+    whitespace separated, # starts a comment)
+    '''
+    aliases = set()
+    with open(path) as f:
+        for line in f:
+            line = line.split('#')[0].strip()
+            if not line:
+                continue
+            names = line.split()
+            assert len(
+                names) > 1, "alias group of one in %s: %s" % (path, line)
+            aliases.add(frozenset(names))
+    return aliases
+
+
+def parsedb_all(db_root, verbose=False, aliases=None):
     '''Verify .db files are individually valid'''
 
     files = 0
@@ -124,14 +143,16 @@ def parsedb_all(db_root, verbose=False):
         if "origin_info" in bit_fn:
             continue
         verbose and print("Checking %s" % bit_fn)
-        parsedb.run(bit_fn, fnout=None, strict=True, verbose=verbose)
+        parsedb.run(
+            bit_fn, fnout=None, strict=True, verbose=verbose, aliases=aliases)
         files += 1
     print("segbits_*.db: %d okay" % files)
 
     files = 0
     for bit_fn in glob.glob('%s/mask_*.db' % db_root):
         verbose and print("Checking %s" % bit_fn)
-        parsedb.run(bit_fn, fnout=None, strict=True, verbose=verbose)
+        parsedb.run(
+            bit_fn, fnout=None, strict=True, verbose=verbose, aliases=aliases)
         files += 1
     print("mask_*.db: %d okay" % files)
 
@@ -218,10 +239,10 @@ def check_tile_overlap(db, verbose=False):
     print("Checked %s tiles, %s bits" % (tiles_checked, bits_used))
 
 
-def run(db_root, part, verbose=False):
+def run(db_root, part, verbose=False, aliases=None):
     # Start by running a basic check on db files
     print("Checking individual .db...")
-    parsedb_all(db_root, verbose=verbose)
+    parsedb_all(db_root, verbose=verbose, aliases=aliases)
 
     # Now load and verify tile consistency
     db = prjxraydb.Database(db_root, part)
@@ -248,9 +269,14 @@ def main():
     util.db_root_arg(parser)
     util.part_arg(parser)
     parser.add_argument('--verbose', action='store_true', help='')
+    parser.add_argument(
+        '--alias-file',
+        help='file of alias groups (see read_alias_file): features in one '
+        'group may share a bit set')
     args = parser.parse_args()
 
-    run(args.db_root, args.part, verbose=args.verbose)
+    aliases = read_alias_file(args.alias_file) if args.alias_file else None
+    run(args.db_root, args.part, verbose=args.verbose, aliases=aliases)
 
 
 if __name__ == '__main__':

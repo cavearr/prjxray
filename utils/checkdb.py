@@ -88,21 +88,31 @@ def mask_bit(masks, addr, bitaddr):
     return mask, bitaddr // 8, 1 << (bitaddr & 7)
 
 
-def collision_owner(grid, tile_segbits, checked_tiles, key):
+def collision_owners(grid, tile_segbits, checked_tiles, keys):
     '''
-    Name the tile that already uses a colliding bit
+    Name the tile that already uses each colliding bit
 
     Only called on the collision path, where the run is about to fail, so the
-    tiles are re-masked here instead of being kept in memory
+    tiles are re-masked here instead of being kept in memory.  Every checked
+    tile is re-masked once and asked for all the keys still unclaimed, and the
+    scan stops once they are all claimed, so a database with many colliding
+    bits costs one pass over the checked tiles rather than one pass per
+    collision.
     '''
+    unclaimed = set(keys)
+    owners = dict()
     for tile_name in checked_tiles:
+        all_keys_claimed = len(unclaimed) == 0
+        if all_keys_claimed:
+            break
         tile_info = grid.gridinfo_at_tilename(tile_name)
         mtile = make_tile_mask(
             tile_segbits[tile_info.tile_type], tile_name, tile_info.bits)
-        tile_owns_the_bit = key in mtile
-        if tile_owns_the_bit:
-            return mtile[key]
-    return "unknown"
+        claimed = unclaimed.intersection(mtile)
+        for key in claimed:
+            owners[key] = mtile[key]
+        unclaimed -= claimed
+    return owners
 
 
 def parsedb_all(db_root, verbose=False):
@@ -191,6 +201,8 @@ def check_tile_overlap(db, verbose=False):
 
         if collisions:
             print("ERROR: %s collisions" % len(collisions))
+            owners = collision_owners(
+                grid, tile_segbits, checked_tiles, collisions)
             mtile = make_tile_mask(
                 tile_segbits[tile_type], tile_name, tile_bits)
             for ck in sorted(collisions):
@@ -199,8 +211,7 @@ def check_tile_overlap(db, verbose=False):
                 print(
                     "  %s: had %s, got %s" % (
                         util.addr2str(addr, word, bit),
-                        collision_owner(grid, tile_segbits, checked_tiles,
-                                        ck), mtile[ck]))
+                        owners.get(ck, "unknown"), mtile[ck]))
             raise ValueError("%s collisions" % len(collisions))
         checked_tiles.append(tile_name)
         tiles_checked += 1

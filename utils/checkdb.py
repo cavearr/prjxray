@@ -120,6 +120,12 @@ def read_alias_file(path):
     Read alias groups: each line names the features that deliberately share one
     bit set, so strict duplicate detection accepts them (one group per line,
     whitespace separated, # starts a comment)
+
+    Each line is expanded into every pair of its names, because that is the
+    form detection asks in: two tags claiming one bit set at a time.  A line
+    reads as "these all name the same thing", which is exactly the set of
+    pairs, and it keeps a three-name group no weaker than the pairs it
+    implies.
     '''
     aliases = set()
     with open(path) as f:
@@ -130,7 +136,9 @@ def read_alias_file(path):
             names = line.split()
             assert len(
                 names) > 1, "alias group of one in %s: %s" % (path, line)
-            aliases.add(frozenset(names))
+            for index, name in enumerate(names):
+                for other in names[index + 1:]:
+                    aliases.add(frozenset((name, other)))
     return aliases
 
 

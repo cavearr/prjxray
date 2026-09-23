@@ -16,9 +16,12 @@ from prjxray.util import OpenSafeFile, db_root_arg, parse_db_line
 def run(fnin, fnout=None, strict=False, verbose=False, aliases=None):
     '''Verify one .db file.
 
-    strict also rejects a tag used twice, and two tags claiming one bit set,
-    except for the pairs in aliases (a set of frozensets of feature names),
-    which the database declares as deliberate aliases of one another.
+    strict also rejects a tag used twice, and any two tags claiming one bit
+    set, except for the pairs in aliases (a set of frozensets of feature
+    names), which the database declares as deliberate aliases of one another.
+    The declared pairs are checked pairwise: a tag has to be a declared alias
+    of every other tag claiming its bits, not just of the one before it, so
+    overlapping declarations cannot leave a pair unchecked.
     '''
     with OpenSafeFile(fnin) as f:
         lines = f.read().split('\n')
@@ -41,15 +44,20 @@ def run(fnin, fnout=None, strict=False, verbose=False, aliases=None):
                 assert 0, "strict: got duplicate tag %s" % (tag, )
             bits_already_used = bits in bitss
             if bits_already_used:
-                previous_tag = bitss[bits]
-                conflicting_tags = frozenset((tag, previous_tag))
-                declared_alias = (
-                    aliases is not None and conflicting_tags in aliases)
-                assert declared_alias, "strict: got duplicate bits %s: %s %s" % (
-                    bits, tag, previous_tag)
+                # Every tag that has claimed these bits, not just the latest
+                # one: with aliases declared pairwise, comparing against the
+                # last claimant alone would let a third tag through on the
+                # strength of a pair it is not part of.
+                for previous_tag in bitss[bits]:
+                    conflicting_tags = frozenset((tag, previous_tag))
+                    declared_alias = (
+                        aliases is not None and conflicting_tags in aliases)
+                    assert declared_alias, (
+                        "strict: got duplicate bits %s: %s %s" %
+                        (bits, tag, previous_tag))
         tags[tag] = line
         if bits != None:
-            bitss[bits] = tag
+            bitss.setdefault(bits, set()).add(tag)
 
     if fnout:
         with OpenSafeFile(fnout, "w") as fout:

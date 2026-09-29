@@ -27,6 +27,11 @@
 #   perf0 / perf1       MMCM CLKOUT0 only / CLKOUT1 only, CLB sink
 #   mmcm0..mmcm3        one-hot: only that BUFRCLK index, fed by CLKOUTn
 #
+#   forced              FUZZ_SIDE required. Per MMCM of the column, one BUFR
+#                       for each CLK_PERF2 / CLK_PERF3 position drawn from the
+#                       specimen's schedule, forced with a routed-via wire
+#                       (see forced_plan() and generate.tcl)
+#
 # FUZZ_SIDE=L or R keeps the MMCM on that CMT column
 # (CMT_TOP_L_LOWER_B / HCLK_CMT_L, or CMT_TOP_R_LOWER_B / HCLK_CMT).
 # Unset, each clock region uses its own MMCM, which is one site.
@@ -35,6 +40,7 @@
 import json
 import os
 import random
+import re
 import sys
 
 from prjxray.db import Database
@@ -302,7 +308,118 @@ def bufh_block(clkin, slice_site):
 """.format(clkin=clkin, sl=slice_site)
 
 
+# The five sources CMT_TOP_{L,R}_LOWER_B can put on a CLK_PERF mux
+# (censused from the device with get_pips on the tile).
+PERF_SOURCES = ["fb", "out0", "out1", "out2", "out3"]
+PERF_MUXES = (2, 3)
+
+
+def specimen_index():
+    """Trailing number of the specimen directory, e.g. specimen_FL_007 -> 7."""
+    m = re.search(r"_(\d+)$", os.path.basename(os.getcwd()))
+    return int(m.group(1)) if m else 0
+
+
+def forced_deck(tile_rank):
+    """Every (source on CLK_PERF2, source on CLK_PERF3) pair, shuffled.
+
+    None means the mux is left cold. The pairs a single net cannot serve
+    (the same source on both muxes needs one net with two forced
+    branches) and the all-cold pair are left out: 30 of 36 remain, and
+    each position of each mux is hot in 5 of them, cold in 25. The
+    shuffle is fixed per tile, so a run is reproducible and consecutive
+    specimens do not walk the positions in table order.
+    """
+    options = [None] + PERF_SOURCES
+    deck = [
+        (a, b) for a in options for b in options
+        if not (a is None and b is None) and not (a is not None and a == b)
+    ]
+    random.Random("perf-deck-{}".format(tile_rank)).shuffle(deck)
+    return deck
+
+
+def main_forced():
+    """One MMCM per clock region of the column, CLK_PERF2/3 forced."""
+    if not SIDE:
+        raise SystemExit("FUZZ_MODE=forced needs FUZZ_SIDE=L or R")
+    seed_rng()
+    grid = load_grid()
+    slices = slices_by_region(grid)
+    mmcm = mmcm_by_region(grid)
+    idx = specimen_index()
+    mmcm_tiles = sorted(t for t, _ in mmcm.values())
+    tile_rank = {t: i for i, t in enumerate(mmcm_tiles)}
+
+    blocks, forced, params = [], [], []
+    num_clocks = 0
+    cursor = {cr: 0 for cr in slices}
+    done_regions = set()
+
+    for (tile, x_min, y_min, bufr_sites, iobs_m, iobs_s, region,
+         mmcm_site, iostd) in gen_hclk_ioi3(grid):
+        if mmcm_site is None or region in done_regions:
+            continue
+        if len(bufr_sites) < 2 or not iobs_m or len(slices.get(region, [])) < 4:
+            continue
+        done_regions.add(region)
+        cmt_tile = mmcm[region][0]
+        rank = tile_rank[cmt_tile]
+        deck = forced_deck(rank)
+        pair = deck[idx % len(deck)]
+
+        ioclks = []
+        for iob in iobs_m:
+            ioclk = "clk_{}".format(iob.replace("/", "_"))
+            ioclks.append(ioclk)
+            blocks.append(ibuf_block(iob, num_clocks, ioclk, iostd[iob]))
+            num_clocks += 1
+        name = "mmcm_{}".format(mmcm_site)
+        blocks.append(mmcm_block(name, ioclks[0], mmcm_site))
+
+        # Two distinct BUFRs of the region, rotated by the specimen index.
+        sites = [s[0] for s in bufr_sites]
+        shift = idx % len(sites)
+        order = sites[shift:] + sites[:shift]
+        for mux, src, bufr in zip(PERF_MUXES, pair, order):
+            if src is None:
+                continue
+            net = "{}_fb".format(name) if src == "fb" else \
+                "{}_{}".format(name, src)
+            blocks.append(bufr_block(bufr, net, "clb"))
+            sl = cursor.get(region, 0)
+            pool = slices[region][sl:sl + 2]
+            cursor[region] = sl + 2
+            blocks.append(counter_block(
+                "{}_o".format(bufr), pool, bufr.replace("/", "_")))
+            forced.append("{} {} {} {} {}".format(
+                net, mmcm_site, mux, bufr, src))
+        params.append({
+            "region": region, "hclk_tile": tile, "cmt_tile": cmt_tile,
+            "mmcm_site": mmcm_site, "side": SIDE, "specimen_index": idx,
+            "clk_perf2": pair[0], "clk_perf3": pair[1],
+        })
+
+    if not forced:
+        sys.stderr.write("forced: nothing to force on side {}\n".format(SIDE))
+        sys.exit(1)
+    print("module top(input [{}:0] clks);".format(max(num_clocks - 1, 0)))
+    print("    (* KEEP, DONT_TOUCH *) LUT6 dummy ();")
+    for block in blocks:
+        print(block)
+    print("endmodule")
+    with open("forced.txt", "w") as f:
+        f.write("\n".join(forced) + "\n")
+    with open("params.json", "w") as f:
+        json.dump(params, f, indent=2)
+    sys.stderr.write("MODE=forced SIDE={} idx={} regions={} forced_nets={}\n"
+                     .format(SIDE, idx, len(params), len(forced)))
+
+
 def main():
+    if MODE == "forced":
+        main_forced()
+        return
     seed_rng()
     grid = load_grid()
     slices = slices_by_region(grid)

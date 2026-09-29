@@ -90,6 +90,31 @@ specimen picks `mmcm_clb` three times out of four (the other draw is
 still `rel_y % 4`. The default `make database` specimen list, and the
 mix used when `FUZZ_SIDE` is unset, are unchanged.
 
+## Directed CLK_PERF2 / CLK_PERF3 population
+
+`make database-forced` (`FORCED_N=64` forced specimens per column, plus
+`CTRL_N=8` unforced ones and the four `mmcm` one-hot specimens per
+column) exists because the random populations above leave positions of
+those two muxes always hot or always cold together, so segmatch cannot
+separate their bits.
+
+A `specimen_FL_*` / `specimen_FR_*` specimen (`FUZZ_MODE=forced`, the
+column from the name) instantiates, per clock region of the column, the
+MMCM on its CMT site, and up to two BUFRs of the region, one per mux:
+the source for CLK_PERF2 and for CLK_PERF3 comes from a per-tile shuffled
+deck of the 30 usable (source, source) pairs, indexed by the specimen
+number. The sources are the five the tile has pips for (`CLKFBOUT`,
+`CLKOUT0`..`CLKOUT3`, censused with `get_pips` on the tile); a source is
+never used on both muxes of a tile (one net would need two forced
+branches) and the all-cold pair is left out. `top.py` writes
+`forced.txt`; `generate.tcl` fixes each net's route through the
+`CLK_PERF<n>` wire of the CMT tile (`find_routing_path` from the MMCM
+output, then to the BUFR input) before `route_design`, and
+`forced_check.txt` records the CLK_PERF pip Vivado ended up with for each
+forced net. For the `CLKFBOUT` source only the branch to the BUFR is
+fixed; the net's other sink, the MMCM's own `CLKFBIN`, is left to the
+router.
+
 ## Thresholds
 
 `-c 5` for the one-bit enables, as 039 and 058 use for the rest of the
@@ -112,9 +137,9 @@ than silent:
   existing row is not a new row. `CLK_PERF3.CLKOUT1` has nothing left
   after the strip and is dropped entirely.
 - A pip the specimens do route for which segmatch finds zero candidate
-  bits is written to `build/ppips_*.db` as a `default` pseudo-pip, tile
-  prefix included. `mergedb` has no pseudo-pip mode, so those are
-  reviewed and applied to the database by hand.
+  bits goes to the notes, not to `build/ppips_*.db` (the file is still
+  written, empty). Zero candidates does not mean "default position": see
+  the directed population below.
 
 `make pushdb` merges only the rows that carry bits. The fuzzer runs no
 `maskmerge`: its population is far too narrow to rewrite masks that 045

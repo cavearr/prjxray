@@ -35,6 +35,19 @@ SIDE_SPECIMENS := \
 		$(addprefix build/specimen_$(sd)_,$(SIDE_SEQ)) \
 		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
 
+# Directed population for the CLK_PERF2 / CLK_PERF3 muxes: FORCED_N
+# specimens per column in which top.py forces one source onto each mux,
+# plus CTRL_N unforced ones per column and the mmcm-fed one-hot specimens.
+FORCED_N ?= 64
+CTRL_N ?= 8
+FORCED_SEQ := $(shell seq -f '%03.0f' $(FORCED_N))
+CTRL_SEQ := $(shell seq -f '%03.0f' $(CTRL_N))
+FORCED_SPECIMENS := \
+	$(foreach sd,L R, \
+		$(addprefix build/specimen_F$(sd)_,$(FORCED_SEQ)) \
+		$(addprefix build/specimen_$(sd)_,$(CTRL_SEQ)) \
+		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
+
 all: database
 
 $(SPECIMENS_OK):
@@ -54,6 +67,9 @@ database: $(addprefix build/segbits_,$(addsuffix .db,$(TILES)))
 
 database-sides:
 	$(MAKE) database SPECIMENS="$(SIDE_SPECIMENS)"
+
+database-forced:
+	$(MAKE) database SPECIMENS="$(FORCED_SPECIMENS)"
 
 build/segbits_hclk_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH_EN) -o $@ $(addsuffix /segdata_hclk_l.txt,$(SPECIMENS))
@@ -106,4 +122,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database database-sides gate pushdb run clean
+.PHONY: all database database-sides database-forced gate pushdb run clean

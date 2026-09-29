@@ -13,12 +13,14 @@
 Three outputs, so that nothing silently reaches the database:
 
   segbits  rows that resolved to real bits.
-  ppips    pips the specimens do route and for which segmatch found zero
-           candidate bits, written as `default` pseudo-pips (the
-           all-zero mux position, the convention INT_L.BYP_ALT* uses).
-           The tag is rewritten to the tile type taken from the output
-           file name, because mergedb has no pseudo-pip mode and these
-           are applied to the database by hand after review.
+  ppips    kept as an output so the Makefile rule is unchanged, but empty.
+           It used to receive a `default` pseudo-pip for every routed pip
+           with zero candidate bits. The directed CLK_PERF2/CLK_PERF3
+           population (`make database-forced`) showed that zero
+           candidates is not evidence of a default position: the four
+           CLKOUT positions of each of those muxes share an enable bit and
+           a two-bit code, so none of them owns a bit segmatch can pick,
+           and none is the all-zero position. Such tags go to the notes.
   notes    every line that was refused, and why.
 
 Two candidate bits are stripped by name because they belong to rows this
@@ -87,9 +89,9 @@ def main():
                 notes.append("drop, never routed in the population: " + tag)
                 continue
             if rest.startswith("<0 candidates>"):
-                ppips.append(
-                    "{} default".format(prefix + tag.split(".", 1)[1]))
-                notes.append("routed with zero candidate bits: " + tag)
+                notes.append(
+                    "drop, routed with zero candidate bits (shared or coded "
+                    "bits, not shown to be a default): " + tag)
                 continue
             if rest.startswith("<"):
                 notes.append("drop, unresolved {}: {}".format(rest, tag))

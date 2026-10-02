@@ -34,6 +34,10 @@
 #   forced4             FUZZ_SIDE required. As forced, for all four CLK_PERF
 #                       muxes at once, and the HCLK_CMT PHSR_PERFCLK pip of
 #                       each net is fixed as well (see forced4_deck())
+#   forced4h            as forced4, but exactly one CLK_PERF mux of each tile
+#                       is hot and the other three are cold (onehot_state());
+#                       the specimens that separate a position's own bits
+#                       from the bits of the other muxes' states
 #
 # FUZZ_SIDE=L or R keeps the MMCM on that CMT column
 # (CMT_TOP_L_LOWER_B / HCLK_CMT_L, or CMT_TOP_R_LOWER_B / HCLK_CMT).
@@ -414,6 +418,24 @@ def forced4_deck(tile_rank, count):
     return deck
 
 
+def onehot_state(tile_rank, idx):
+    """One mux hot, the other three cold.
+
+    The greedy deck of forced4_deck() covers the matrix with arrangements
+    that drive as many muxes as possible, so a position is almost never
+    hot while the other group is cold, and the bits of the other muxes'
+    states cannot be told from its own. Here the 20 (mux, source) cells
+    are walked in order, each reached through both PERFCLKs of its group
+    on alternate passes; the tiles of a column are offset from each other
+    so that one specimen covers several cells.
+    """
+    cells = [(m, s) for m in range(4) for s in PERF_SOURCES]
+    i = idx + 7 * tile_rank
+    mux, src = cells[i % len(cells)]
+    group = PERF_GROUPS[mux // 2]
+    return {mux: (src, group[(i // len(cells)) % 2])}
+
+
 def main_forced4():
     """One MMCM per clock region of the column, CLK_PERF0..3 forced."""
     if not SIDE:
@@ -441,8 +463,11 @@ def main_forced4():
         cmt_tile = mmcm[region][0]
         rank = tile_rank[cmt_tile]
         state = {}
-        for part in forced4_deck(rank, idx + 1)[idx]:
-            state.update(part)
+        if MODE == "forced4h":
+            state = onehot_state(rank, idx)
+        else:
+            for part in forced4_deck(rank, idx + 1)[idx]:
+                state.update(part)
 
         ioclks = []
         for iob in iobs_m:
@@ -575,7 +600,7 @@ def main():
     if MODE == "forced":
         main_forced()
         return
-    if MODE == "forced4":
+    if MODE in ("forced4", "forced4h"):
         main_forced4()
         return
     seed_rng()

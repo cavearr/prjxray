@@ -62,6 +62,19 @@ FORCED4_SPECIMENS := \
 		$(addprefix build/specimen_$(sd)_,$(C4_SEQ)) \
 		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
 
+# One-hot top-up of the four-mux population: H_NL / H_NR specimens per
+# column (forced4h: one mux hot, three cold). The columns have different
+# numbers of CMT tiles per specimen, so the counts are set per family on
+# the command line; `make database-forced4-onehot` builds the specimens of
+# database-forced4 as well, and only the new ones are run.
+H_NL ?= 80
+H_NR ?= 80
+HL_SEQ := $(shell seq -f '%03.0f' $(H_NL))
+HR_SEQ := $(shell seq -f '%03.0f' $(H_NR))
+FORCED4H_SPECIMENS := $(FORCED4_SPECIMENS) \
+	$(addprefix build/specimen_HL_,$(HL_SEQ)) \
+	$(addprefix build/specimen_HR_,$(HR_SEQ))
+
 all: database
 
 $(SPECIMENS_OK):
@@ -87,6 +100,9 @@ database-forced:
 
 database-forced4:
 	$(MAKE) database SPECIMENS="$(FORCED4_SPECIMENS)"
+
+database-forced4-onehot:
+	$(MAKE) database SPECIMENS="$(FORCED4H_SPECIMENS)"
 
 build/segbits_hclk_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH_EN) -o $@ $(addsuffix /segdata_hclk_l.txt,$(SPECIMENS))
@@ -139,4 +155,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database database-sides database-forced database-forced4 gate pushdb run clean
+.PHONY: all database database-sides database-forced database-forced4 database-forced4-onehot gate pushdb run clean

@@ -49,6 +49,8 @@ case "$(basename "$SPECDIR")" in
     specimen_FR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced ;;
     specimen_GL_*) export FUZZ_SIDE=L; export FUZZ_MODE=forced4 ;;
     specimen_GR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced4 ;;
+    specimen_HL_*) export FUZZ_SIDE=L; export FUZZ_MODE=forced4h ;;
+    specimen_HR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced4h ;;
     specimen_L_*) export FUZZ_SIDE=L; export FUZZ_MODE=campaign ;;
     specimen_R_*) export FUZZ_SIDE=R; export FUZZ_MODE=campaign ;;
     *) export FUZZ_MODE="${FUZZ_MODE:-campaign}" ;;

@@ -115,6 +115,37 @@ forced net. For the `CLKFBOUT` source only the branch to the BUFR is
 fixed; the net's other sink, the MMCM's own `CLKFBIN`, is left to the
 router.
 
+## Four-mux population: CLK_PERF0..3 and the PHSR_PERFCLK pip behind each
+
+`make database-forced4` (`G_N=80` specimens per column, `CTRL_N=8` unforced
+ones numbered from `CTRL_FIRST=101`, and the four `mmcm` one-hot ones) and
+`make H_NL=.. H_NR=.. database-forced4-onehot` (the same plus `H_NL` /
+`H_NR` one-hot-mux specimens per column) extend the population above to all
+four CLK_PERF muxes and fix the HCLK_CMT pip as well.
+
+A `specimen_GL_*` / `specimen_GR_*` specimen (`FUZZ_MODE=forced4`) drives,
+per clock region, up to four BUFRs, one per CLK_PERF mux that its
+arrangement makes hot. A mux takes one of the five sources and goes through
+one of the two PERFCLK of its pair (`CLK_PERF0/1` through `PERFCLK0/1`,
+`CLK_PERF2/3` through `PERFCLK2/3`, each PERFCLK at most once); no source
+drives two muxes. `forced4_deck()` picks the arrangement of each
+specimen by a greedy cover of the cells (source per mux, PERFCLK per mux,
+PERFCLK used while the other of its pair is not), shuffled per tile with
+a fixed seed, so a run is reproducible and `G_N` can be raised without
+changing the earlier specimens. A line of `forced.txt` has a sixth field,
+the PERFCLK; `generate.tcl` then fixes the route through that
+`HCLK_CMT_MUX_PHSR_PERFCLK<p>` wire as well (the HCLK_CMT tile is the one
+the unforced path crosses), and `forced_check.txt` adds `phsr=<n>` and the
+PHSR pip.
+
+The greedy deck drives as many muxes as it can, so a position is almost
+never hot while the rest of the tile is cold and its own bits cannot be
+told from those of the other muxes' states. `specimen_HL_*` /
+`specimen_HR_*` (`FUZZ_MODE=forced4h`, `onehot_state()`) drive exactly one
+mux of each tile, walking the 20 (mux, source) cells, each through both
+PERFCLKs of its group on alternate passes; the tiles of a column are
+offset from each other, so one specimen covers several cells.
+
 ## Thresholds
 
 `-c 5` for the one-bit enables, as 039 and 058 use for the rest of the

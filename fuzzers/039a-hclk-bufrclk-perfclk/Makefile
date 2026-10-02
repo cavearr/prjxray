@@ -48,6 +48,20 @@ FORCED_SPECIMENS := \
 		$(addprefix build/specimen_$(sd)_,$(CTRL_SEQ)) \
 		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
 
+# Four-mux population: G_N specimens per column in which top.py forces
+# a source onto each of CLK_PERF0..3 and the PHSR_PERFCLK pip behind it
+# (forced4), CTRL_N unforced ones per column (numbered from CTRL_FIRST, so
+# they are not the specimens of the forced run above) and the one-hot ones.
+G_N ?= 80
+CTRL_FIRST ?= 101
+G_SEQ := $(shell seq -f '%03.0f' $(G_N))
+C4_SEQ := $(shell seq -f '%03.0f' $(CTRL_FIRST) $$(( $(CTRL_FIRST) + $(CTRL_N) - 1 )))
+FORCED4_SPECIMENS := \
+	$(foreach sd,L R, \
+		$(addprefix build/specimen_G$(sd)_,$(G_SEQ)) \
+		$(addprefix build/specimen_$(sd)_,$(C4_SEQ)) \
+		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
+
 all: database
 
 $(SPECIMENS_OK):
@@ -70,6 +84,9 @@ database-sides:
 
 database-forced:
 	$(MAKE) database SPECIMENS="$(FORCED_SPECIMENS)"
+
+database-forced4:
+	$(MAKE) database SPECIMENS="$(FORCED4_SPECIMENS)"
 
 build/segbits_hclk_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH_EN) -o $@ $(addsuffix /segdata_hclk_l.txt,$(SPECIMENS))
@@ -122,4 +139,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database database-sides database-forced gate pushdb run clean
+.PHONY: all database database-sides database-forced database-forced4 gate pushdb run clean

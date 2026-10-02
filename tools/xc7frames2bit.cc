@@ -77,6 +77,7 @@ struct Frames2BitWriter {
 		        "xc7frames2bit", FLAGS_output_file)) {
 			std::cerr << "Failed to write bitstream" << std::endl
 			          << "Exitting" << std::endl;
+			return 1;
 		}
 		return 0;
 	}

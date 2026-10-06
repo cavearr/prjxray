@@ -30,7 +30,7 @@
 #   forced              FUZZ_SIDE required. Per MMCM of the column, one BUFR
 #                       for each CLK_PERF2 / CLK_PERF3 position drawn from the
 #                       specimen's schedule, forced with a routed-via wire
-#                       (see forced_plan() and generate.tcl)
+#                       (see forced_deck() and generate.tcl)
 #   forced4             FUZZ_SIDE required. As forced, for all four CLK_PERF
 #                       muxes at once, and the HCLK_CMT PHSR_PERFCLK pip of
 #                       each net is fixed as well (see forced4_deck())

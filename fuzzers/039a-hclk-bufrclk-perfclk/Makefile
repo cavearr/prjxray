@@ -35,6 +35,46 @@ SIDE_SPECIMENS := \
 		$(addprefix build/specimen_$(sd)_,$(SIDE_SEQ)) \
 		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
 
+# Directed population for the CLK_PERF2 / CLK_PERF3 muxes: FORCED_N
+# specimens per column in which top.py forces one source onto each mux,
+# plus CTRL_N unforced ones per column and the mmcm-fed one-hot specimens.
+FORCED_N ?= 64
+CTRL_N ?= 8
+FORCED_SEQ := $(shell seq -f '%03.0f' $(FORCED_N))
+CTRL_SEQ := $(shell seq -f '%03.0f' $(CTRL_N))
+FORCED_SPECIMENS := \
+	$(foreach sd,L R, \
+		$(addprefix build/specimen_F$(sd)_,$(FORCED_SEQ)) \
+		$(addprefix build/specimen_$(sd)_,$(CTRL_SEQ)) \
+		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
+
+# Four-mux population: G_N specimens per column in which top.py forces
+# a source onto each of CLK_PERF0..3 and the PHSR_PERFCLK pip behind it
+# (forced4), CTRL_N unforced ones per column (numbered from CTRL_FIRST, so
+# they are not the specimens of the forced run above) and the one-hot ones.
+G_N ?= 80
+CTRL_FIRST ?= 101
+G_SEQ := $(shell seq -f '%03.0f' $(G_N))
+C4_SEQ := $(shell seq -f '%03.0f' $(CTRL_FIRST) $$(( $(CTRL_FIRST) + $(CTRL_N) - 1 )))
+FORCED4_SPECIMENS := \
+	$(foreach sd,L R, \
+		$(addprefix build/specimen_G$(sd)_,$(G_SEQ)) \
+		$(addprefix build/specimen_$(sd)_,$(C4_SEQ)) \
+		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
+
+# One-hot top-up of the four-mux population: H_NL / H_NR specimens per
+# column (forced4h: one mux hot, three cold). The columns have different
+# numbers of CMT tiles per specimen, so the counts are set per family on
+# the command line; `make database-forced4-onehot` builds the specimens of
+# database-forced4 as well, and only the new ones are run.
+H_NL ?= 80
+H_NR ?= 80
+HL_SEQ := $(shell seq -f '%03.0f' $(H_NL))
+HR_SEQ := $(shell seq -f '%03.0f' $(H_NR))
+FORCED4H_SPECIMENS := $(FORCED4_SPECIMENS) \
+	$(addprefix build/specimen_HL_,$(HL_SEQ)) \
+	$(addprefix build/specimen_HR_,$(HR_SEQ))
+
 all: database
 
 $(SPECIMENS_OK):
@@ -54,6 +94,15 @@ database: $(addprefix build/segbits_,$(addsuffix .db,$(TILES)))
 
 database-sides:
 	$(MAKE) database SPECIMENS="$(SIDE_SPECIMENS)"
+
+database-forced:
+	$(MAKE) database SPECIMENS="$(FORCED_SPECIMENS)"
+
+database-forced4:
+	$(MAKE) database SPECIMENS="$(FORCED4_SPECIMENS)"
+
+database-forced4-onehot:
+	$(MAKE) database SPECIMENS="$(FORCED4H_SPECIMENS)"
 
 build/segbits_hclk_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH_EN) -o $@ $(addsuffix /segdata_hclk_l.txt,$(SPECIMENS))
@@ -106,4 +155,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database database-sides gate pushdb run clean
+.PHONY: all database database-sides database-forced database-forced4 database-forced4-onehot gate pushdb run clean

@@ -45,6 +45,12 @@ case "$(basename "$SPECDIR")" in
     specimen_calR1) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm1 ;;
     specimen_calR2) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm2 ;;
     specimen_calR3) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm3 ;;
+    specimen_FL_*) export FUZZ_SIDE=L; export FUZZ_MODE=forced ;;
+    specimen_FR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced ;;
+    specimen_GL_*) export FUZZ_SIDE=L; export FUZZ_MODE=forced4 ;;
+    specimen_GR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced4 ;;
+    specimen_HL_*) export FUZZ_SIDE=L; export FUZZ_MODE=forced4h ;;
+    specimen_HR_*) export FUZZ_SIDE=R; export FUZZ_MODE=forced4h ;;
     specimen_L_*) export FUZZ_SIDE=L; export FUZZ_MODE=campaign ;;
     specimen_R_*) export FUZZ_SIDE=R; export FUZZ_MODE=campaign ;;
     *) export FUZZ_MODE="${FUZZ_MODE:-campaign}" ;;

@@ -203,12 +203,11 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
         for bit in (self.HP_OQUSED, self.HP_OMUX_D1, self.HP_TQ_BUF):
             self.assertIn(bit, bits)
 
+        # ZINV_T1 is the one pass-through feature that sets none of the glue
+        # bits, so here they can only come from the glue.
         bits = frm2bits(
             self.fasm2frames(
-                self.HP_DRIVE + 'LIOI_X2Y10.OLOGIC_Y1.OQUSED\n'
-                'LIOI_X2Y10.OLOGIC_Y1.OMUX.D1\n'
-                'LIOI_X2Y10.OLOGIC_Y1.OSERDES.DATA_RATE_TQ.BUF\n'
-                'LIOI_X2Y10.OLOGIC_Y1.ZINV_T1\n'))
+                self.HP_DRIVE + 'LIOI_X2Y10.OLOGIC_Y1.ZINV_T1\n'))
         for bit in (self.HP_OQUSED, self.HP_OMUX_D1, self.HP_TQ_BUF):
             self.assertIn(bit, bits)
 
